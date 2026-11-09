@@ -7,6 +7,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"sync"
 )
@@ -25,7 +26,6 @@ func NewKVStore(filename string) *KVStore {
 	}
 
 	store.load()
-
 	return store
 }
 
@@ -35,7 +35,6 @@ func (s *KVStore) Put(key, value string) error {
 	defer s.mu.Unlock()
 
 	s.data[key] = value
-
 	return s.save()
 }
 
@@ -54,7 +53,6 @@ func (s *KVStore) Delete(key string) error {
 	defer s.mu.Unlock()
 
 	delete(s.data, key)
-
 	return s.save()
 }
 
@@ -67,9 +65,9 @@ func (s *KVStore) Exists(key string) bool {
 	return exists
 }
 
-// Save data to a JSON file
+// Save data to JSON file
 func (s *KVStore) save() error {
-	fileData, err := json.Marshal(s.data)
+	fileData, err := json.MarshalIndent(s.data, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -77,7 +75,7 @@ func (s *KVStore) save() error {
 	return os.WriteFile(s.file, fileData, 0644)
 }
 
-// Load data from a JSON file
+// Load data from JSON file
 func (s *KVStore) load() {
 	fileData, err := os.ReadFile(s.file)
 
@@ -89,67 +87,83 @@ func (s *KVStore) load() {
 	}
 
 	err = json.Unmarshal(fileData, &s.data)
-
 	if err != nil {
 		fmt.Println("Error parsing database:", err)
 	}
+}
+
+// Generate a random 8-character name
+func randomName() string {
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+
+	name := make([]byte, 8)
+
+	for i := range name {
+		name[i] = letters[rand.Intn(len(letters))]
+	}
+
+	return string(name)
 }
 
 func main() {
 	store := NewKVStore("database.json")
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(2)
 
-	// Goroutine 1: Writing to "name"
+	// Goroutine 1: Write 100 users
 	go func() {
 		defer wg.Done()
 
-		for i := 0; i < 100; i++ {
-			err := store.Put("name", fmt.Sprintf("User%d", i))
+		for i := 1; i <= 100; i++ {
+			user := fmt.Sprintf("user%d", i)
+			name := randomName()
+			age := 20 + rand.Intn(30)
+
+			err := store.Put(user+":name", name)
 			if err != nil {
 				fmt.Println("Error writing name:", err)
 			}
-		}
-	}()
 
-	// Goroutine 2: Reading from "name"
-	go func() {
-		defer wg.Done()
-
-		for i := 0; i < 100; i++ {
-			value, exists := store.Get("name")
-			if exists {
-				fmt.Println("Name:", value)
-			}
-		}
-	}()
-
-	// Goroutine 3: Writing to "age"
-	go func() {
-		defer wg.Done()
-
-		for i := 0; i < 100; i++ {
-			err := store.Put("age", fmt.Sprintf("%d", i))
+			err = store.Put(user+":age", fmt.Sprintf("%d", age))
 			if err != nil {
 				fmt.Println("Error writing age:", err)
 			}
 		}
 	}()
 
-	// Wait until all goroutines finish
+	// Goroutine 2: Read user information
+	go func() {
+		defer wg.Done()
+
+		for i := 1; i <= 100; i++ {
+			user := fmt.Sprintf("user%d", i)
+
+			name, nameExists := store.Get(user + ":name")
+			age, ageExists := store.Get(user + ":age")
+
+			if nameExists && ageExists {
+				fmt.Printf(
+					"%s -> Name: %s, Age: %s\n",
+					user, name, age,
+				)
+			}
+		}
+	}()
+
+	// Wait for both goroutines
 	wg.Wait()
 
 	fmt.Println("All goroutines finished!")
 
 	// Check final values
-	name, exists := store.Get("name")
+	name, exists := store.Get("user1:name")
 	if exists {
-		fmt.Println("Final name:", name)
+		fmt.Println("User1 name:", name)
 	}
 
-	age, exists := store.Get("age")
+	age, exists := store.Get("user1:age")
 	if exists {
-		fmt.Println("Final age:", age)
+		fmt.Println("User1 age:", age)
 	}
 }

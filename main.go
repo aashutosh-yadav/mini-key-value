@@ -98,27 +98,58 @@ func (s *KVStore) load() {
 func main() {
 	store := NewKVStore("database.json")
 
-	// PUT
-	err := store.Put("name", "Alice")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	var wg sync.WaitGroup
+	wg.Add(3)
 
-	store.Put("city", "Pune")
+	// Goroutine 1: Writing to "name"
+	go func() {
+		defer wg.Done()
 
-	// GET
-	value, exists := store.Get("name")
+		for i := 0; i < 100; i++ {
+			err := store.Put("name", fmt.Sprintf("User%d", i))
+			if err != nil {
+				fmt.Println("Error writing name:", err)
+			}
+		}
+	}()
 
+	// Goroutine 2: Reading from "name"
+	go func() {
+		defer wg.Done()
+
+		for i := 0; i < 100; i++ {
+			value, exists := store.Get("name")
+			if exists {
+				fmt.Println("Name:", value)
+			}
+		}
+	}()
+
+	// Goroutine 3: Writing to "age"
+	go func() {
+		defer wg.Done()
+
+		for i := 0; i < 100; i++ {
+			err := store.Put("age", fmt.Sprintf("%d", i))
+			if err != nil {
+				fmt.Println("Error writing age:", err)
+			}
+		}
+	}()
+
+	// Wait until all goroutines finish
+	wg.Wait()
+
+	fmt.Println("All goroutines finished!")
+
+	// Check final values
+	name, exists := store.Get("name")
 	if exists {
-		fmt.Println("Name:", value)
+		fmt.Println("Final name:", name)
 	}
 
-	// EXISTS
-	fmt.Println("Name exists:", store.Exists("name"))
-
-	// DELETE
-	store.Delete("city")
-
-	fmt.Println("City exists:", store.Exists("city"))
+	age, exists := store.Get("age")
+	if exists {
+		fmt.Println("Final age:", age)
+	}
 }
